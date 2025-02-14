@@ -1,0 +1,116 @@
+diff -ur 6.12.5/include/net/netns/ipv4.h 6.12.5-patched/include/net/netns/ipv4.h
+--- 6.12.5/include/net/netns/ipv4.h	2025-01-12 19:38:42.587847494 +0200
++++ 6.12.5-patched/include/net/netns/ipv4.h	2025-01-13 06:27:29.688182237 +0200
+@@ -225,6 +225,7 @@
+ 	int sysctl_udp_rmem_min;
+ 
+ 	u8 sysctl_fib_notify_on_flag_change;
+ 	u8 sysctl_tcp_syn_linear_timeouts;
++	unsigned int sysctl_tcp_collapse_max_bytes;
+ 
+ #ifdef CONFIG_NET_L3_MASTER_DEV
+diff -ur 6.12.5/include/trace/events/tcp.h 6.12.5-patched/include/trace/events/tcp.h
+--- 6.12.5/include/trace/events/tcp.h	2025-01-12 19:38:42.578847447 +0200
++++ 6.12.5-patched/include/trace/events/tcp.h	2025-01-13 06:25:18.153488417 +0200
+@@ -213,6 +213,13 @@
+ 	TP_ARGS(sk)
+ );
+ 
++DEFINE_EVENT(tcp_event_sk, tcp_collapse_max_bytes_exceeded,
++
++	TP_PROTO(struct sock *sk),
++
++	TP_ARGS(sk)
++);
++
+ TRACE_EVENT(tcp_retransmit_synack,
+ 
+ 	TP_PROTO(const struct sock *sk, const struct request_sock *req),
+diff -ur 6.12.5/net/ipv4/sysctl_net_ipv4.c 6.12.5-patched/net/ipv4/sysctl_net_ipv4.c
+--- 6.12.5/net/ipv4/sysctl_net_ipv4.c	2025-01-12 19:38:42.156845221 +0200
++++ 6.12.5-patched/net/ipv4/sysctl_net_ipv4.c	2025-01-13 06:30:14.606052155 +0200
+@@ -1573,6 +1573,13 @@
+ 		.proc_handler	= proc_dointvec_minmax,
+ 		.extra1		= SYSCTL_ONE,
+ 	},
++ 	{
++ 		.procname	= "tcp_collapse_max_bytes",
++ 		.data		= &init_net.ipv4.sysctl_tcp_collapse_max_bytes,
++ 		.maxlen		= sizeof(unsigned int),
++ 		.mode		= 0644,
++ 		.proc_handler	= proc_douintvec_minmax,
++ 	},
+ };
+ 
+ static __net_init int ipv4_sysctl_init_net(struct net *net)
+diff -ur 6.12.5/net/ipv4/tcp_input.c 6.12.5-patched/net/ipv4/tcp_input.c
+--- 6.12.5/net/ipv4/tcp_input.c	2025-01-12 19:38:42.157845226 +0200
++++ 6.12.5-patched/net/ipv4/tcp_input.c	2025-01-13 06:25:18.159488449 +0200
+@@ -5627,6 +5627,7 @@
+ static int tcp_prune_queue(struct sock *sk, const struct sk_buff *in_skb)
+ {
+ 	struct tcp_sock *tp = tcp_sk(sk);
++	struct net *net = sock_net(sk);
+ 
+ 	NET_INC_STATS(sock_net(sk), LINUX_MIB_PRUNECALLED);
+ 
+@@ -5638,6 +5639,39 @@
+ 	if (atomic_read(&sk->sk_rmem_alloc) <= sk->sk_rcvbuf)
+ 		return 0;
+ 
++	/* For context and additional information about this patch, see the
++	 * blog post at
++	 *
++	 * sysctl:  net.ipv4.tcp_collapse_max_bytes
++	 *
++	 * If tcp_collapse_max_bytes is non-zero, attempt to collapse the
++	 * queue to free up memory if the current amount of memory allocated
++	 * is less than tcp_collapse_max_bytes.  Otherwise, the packet is
++	 * dropped without attempting to collapse the queue.
++	 *
++	 * If tcp_collapse_max_bytes is zero, this feature is disabled
++	 * and the default Linux behavior is used.  The default Linux
++	 * behavior is to always perform the attempt to collapse the
++	 * queue to free up memory.
++	 *
++	 * When the receive queue is small, we want to collapse the
++	 * queue.  There are two reasons for this: (a) the latency of
++	 * performing the collapse will be small on a small queue, and
++	 * (b) we want to avoid sending a congestion signal (via a
++	 * packet drop) to the sender when the receive queue is small.
++	 *
++	 * The result is that we avoid latency spikes caused by the
++	 * time it takes to perform the collapse logic when the receive
++	 * queue is large and full, while preserving existing behavior
++	 * and performance for all other cases.
++	 */
++	if (net->ipv4.sysctl_tcp_collapse_max_bytes &&
++		(atomic_read(&sk->sk_rmem_alloc) > net->ipv4.sysctl_tcp_collapse_max_bytes)) {
++		/* We are dropping the packet */
++		trace_tcp_collapse_max_bytes_exceeded(sk);
++		goto do_not_collapse;
++	}
++
+ 	tcp_collapse_ofo_queue(sk);
+ 	if (!skb_queue_empty(&sk->sk_receive_queue))
+ 		tcp_collapse(sk, &sk->sk_receive_queue, NULL,
+@@ -5656,6 +5690,8 @@
+ 	if (atomic_read(&sk->sk_rmem_alloc) <= sk->sk_rcvbuf)
+ 		return 0;
+ 
++do_not_collapse:
++
+ 	/* If we are really being abused, tell the caller to silently
+ 	 * drop receive data on the floor.  It will get retransmitted
+ 	 * and hopefully then we'll have sufficient space.
+diff -ur 6.12.5/net/ipv4/tcp_ipv4.c 6.12.5-patched/net/ipv4/tcp_ipv4.c
+--- 6.12.5/net/ipv4/tcp_ipv4.c	2025-01-12 19:38:42.157845226 +0200
++++ 6.12.5-patched/net/ipv4/tcp_ipv4.c	2025-01-13 06:39:08.447868093 +0200
+@@ -3523,6 +3523,7 @@
+ 	else
+ 		net->ipv4.tcp_congestion_control = &tcp_reno;
+ 
++	net->ipv4.sysctl_tcp_collapse_max_bytes = 0;
+ 	net->ipv4.sysctl_tcp_syn_linear_timeouts = 4;
+ 	net->ipv4.sysctl_tcp_shrink_window = 0;
+ 
