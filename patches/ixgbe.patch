@@ -1,6 +1,6 @@
-diff -Naur -p1 6.12.5-xxx/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c 6.12.5-qlt/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c
---- 6.12.5-xxx/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c	2025-02-23 12:08:37.590264637 +0200
-+++ 6.12.5-qlt/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c	2025-02-23 11:54:28.120210919 +0200
+diff -Naur -p1 a/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c b/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c
+--- a/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c	2025-02-23 12:08:37.590264637 +0200
++++ b/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c	2025-02-23 11:54:28.120210919 +0200
 @@ -1742,2 +1742,5 @@ int ixgbe_identify_sfp_module_generic(st
  			break;
 +		case IXGBE_SFF_VENDOR_OUI_MENARA:
@@ -30,16 +30,16 @@ diff -Naur -p1 6.12.5-xxx/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c 6.12.5-ql
 +			}
 +		}
  	}
-diff -Naur -p1 6.12.5-xxx/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h 6.12.5-qlt/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h
---- 6.12.5-xxx/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h	2025-02-23 12:08:37.590264637 +0200
-+++ 6.12.5-qlt/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h	2025-02-23 11:54:28.120210919 +0200
+diff -Naur -p1 a/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h b/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h
+--- a/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h	2025-02-23 12:08:37.590264637 +0200
++++ b/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h	2025-02-23 11:54:28.120210919 +0200
 @@ -104,2 +104,3 @@
  #define IXGBE_SFF_VENDOR_OUI_INTEL    0x001B2100
 +#define IXGBE_SFF_VENDOR_OUI_MENARA   0x004D4E00
  
-diff -Naur -p1 6.12.5-xxx/drivers/net/ethernet/intel/ixgbe/ixgbe_type.h 6.12.5-qlt/drivers/net/ethernet/intel/ixgbe/ixgbe_type.h
---- 6.12.5-xxx/drivers/net/ethernet/intel/ixgbe/ixgbe_type.h	2025-02-23 12:08:37.591264637 +0200
-+++ 6.12.5-qlt/drivers/net/ethernet/intel/ixgbe/ixgbe_type.h	2025-02-23 11:54:28.121210919 +0200
+diff -Naur -p1 a/drivers/net/ethernet/intel/ixgbe/ixgbe_type.h b/drivers/net/ethernet/intel/ixgbe/ixgbe_type.h
+--- a/drivers/net/ethernet/intel/ixgbe/ixgbe_type.h	2025-02-23 12:08:37.591264637 +0200
++++ b/drivers/net/ethernet/intel/ixgbe/ixgbe_type.h	2025-02-23 11:54:28.121210919 +0200
 @@ -3172,2 +3172,3 @@ enum ixgbe_phy_type {
  	ixgbe_phy_sfp_intel,
 +	ixgbe_phy_sfp_menara,
